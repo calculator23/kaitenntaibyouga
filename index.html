@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D回転体生成</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        canvas {
+            border: 1px solid #fff;
+        }
+
+        #controls {
+            position: fixed;
+            top: 50%;
+            right: 50px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        #info {
+            position: fixed;
+            top: 50%;
+            left: 50px;
+            transform: translateY(-50%);
+            color: #fff;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        button {
+            margin-bottom: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:active {
+            background-color: #003d80;
+        }
+
+        #inputForm {
+            position: fixed;
+            top: 50%;
+            left: 50px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+
+        #inputForm input {
+            margin-bottom: 10px;
+            padding: 10px;
+            font-size: 16px;
+            color: #000;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #inputForm label {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gridCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <button id="drawButton">決定</button>
+        <button id="rotateButton">回転体</button>
+        <button id="fillButton" style="display: none;">塗りつぶし</button>
+        <button id="resetButton">リセット</button>
+    </div>
+    <div id="info" style="display: none;">
+        <h2>回転体情報</h2>
+        <p id="pointsInfo"></p>
+        <p id="geometryInfo"></p>
+        <p id="volumeInfo"></p>
+        <p id="surfaceAreaInfo"></p>
+    </div>
+    <div id="inputForm">
+        <label for="xCoord">X座標:</label>
+        <input type="number" id="xCoord" min="-20" max="20" />
+        <label for="yCoord">Y座標:</label>
+        <input type="number" id="yCoord" min="-15" max="15" />
+        <button id="addPointButton">点追加</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const canvas = document.getElementById('gridCanvas');
+        const context = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        const gridSize = 20; // グリッドのサイズ
+        const points = [];
+        let lathe;
+        let renderer;
+        let scene;
+        let camera;
+
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        const SCALE_X = 25; // X座標のスケール因子
+        const SCALE_Y = 25; // Y座標のスケール因子
+
+        function drawGrid() {
+            context.clearRect(0, 0, width, height);
+
+            // Draw center lines
+            context.beginPath();
+            context.moveTo(0, centerY);
+            context.lineTo(width, centerY);
+            context.moveTo(centerX, 0);
+            context.lineTo(centerX, height);
+            context.strokeStyle = '#fff';
+            context.lineWidth = 2;
+            context.stroke();
+
+            // Draw grid lines
+            context.strokeStyle = '#555';
+            context.lineWidth = 1;
+
+            for (let x = 0; x <= width; x += gridSize) {
+                context.beginPath();
+                context.moveTo(x, 0);
+                context.lineTo(x, height);
+                context.stroke();
+            }
+
+            for (let y = 0; y <= height; y += gridSize) {
+                context.beginPath();
+                context.moveTo(0, y);
+                context.lineTo(width, y);
+                context.stroke();
+            }
+        }
+
+        drawGrid();
+
+        function addPointToCanvas(x, y) {
+            context.fillStyle = 'red';
+            context.beginPath();
+            context.arc(centerX + x * gridSize, centerY - y * gridSize, 5, 0, Math.PI * 2);
+            context.fill();
+        }
+
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round((event.clientX - rect.left - centerX) / gridSize);
+            const y = Math.round((centerY - (event.clientY - rect.top)) / gridSize);
+
+            if (x >= -20 && x <= 20 && y >= -15 && y <= 15) {
+                addPointToCanvas(x, y);
+                points.push({ x, y });
+            } else {
+                alert('座標が制限を超えています。Xは-20から20、Yは-15から15の範囲で入力してください。');
+            }
+        });
+
+        document.getElementById('drawButton').addEventListener('click', () => {
+            if (points.length > 1) {
+                context.strokeStyle = 'cyan';
+                context.lineWidth = 2;
+                context.beginPath();
+                context.moveTo(centerX + points[0].x * gridSize, centerY - points[0].y * gridSize);
+
+                for (let i = 1; i < points.length; i++) {
+                    context.lineTo(centerX + points[i].x * gridSize, centerY - points[i].y * gridSize);
+                }
+
+                context.lineTo(centerX + points[0].x * gridSize, centerY - points[0].y * gridSize);
+                context.stroke();
+
+                context.fillStyle = 'rgba(0, 255, 255, 0.3)';
+                context.fill();
+            }
+        });
+
+        document.getElementById('rotateButton').addEventListener('click', () => {
+            if (points.length > 1) {
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer();
+                renderer.setSize(width, height);
+                renderer.setClearColor(0x000000);
+                document.body.appendChild(renderer.domElement);
+
+                const shape = new THREE.Shape();
+                shape.moveTo(points[0].x * SCALE_X, points[0].y * SCALE_Y);
+
+                for (let i = 1; i < points.length; i++) {
+                    shape.lineTo(points[i].x * SCALE_X, points[i].y * SCALE_Y);
+                }
+
+                shape.lineTo(points[0].x * SCALE_X, points[0].y * SCALE_Y);
+
+                const geometry = new THREE.LatheGeometry(shape.getPoints(50), 50);
+                const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true });
+                lathe = new THREE.Mesh(geometry, material);
+                scene.add(lathe);
+
+                camera.position.z = 500;
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    lathe.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                }
+
+                animate();
+
+                document.getElementById('gridCanvas').style.display = 'none';
+                document.getElementById('controls').style.display = 'flex';
+                document.getElementById('fillButton').style.display = 'block';
+                document.getElementById('drawButton').style.display = 'none';
+                document.getElementById('rotateButton').style.display = 'none';
+                document.getElementById('inputForm').style.display = 'none'; // Hide the input form
+
+                document.getElementById('info').style.display = 'block';
+                document.getElementById('pointsInfo').innerText = `点の数: ${points.length}`;
+
+                const volume = calculateVolume();
+                const surfaceArea = calculateSurfaceArea(geometry);
+
+                document.getElementById('volumeInfo').innerText = `体積: 円盤法での計算でバグが発生 `;
+                document.getElementById('surfaceAreaInfo').innerText = `表面積: 重複部分でバグが発生 `;
+            }
+        });
+
+        document.getElementById('fillButton').addEventListener('click', () => {
+            if (lathe) {
+                lathe.material = new THREE.MeshBasicMaterial({
+                    color: 0x00ffff,
+                    side: THREE.DoubleSide
+                });
+            }
+        });
+
+        document.getElementById('resetButton').addEventListener('click', () => {
+            location.reload();
+        });
+
+        document.getElementById('addPointButton').addEventListener('click', () => {
+            const xCoord = parseInt(document.getElementById('xCoord').value, 10);
+            const yCoord = parseInt(document.getElementById('yCoord').value, 10);
+
+            if (!isNaN(xCoord) && !isNaN(yCoord) && xCoord >= -20 && xCoord <= 20 && yCoord >= -15 && yCoord <= 15) {
+                addPointToCanvas(xCoord, yCoord);
+                points.push({ x: xCoord, y: yCoord });
+            } else {
+                alert('座標が制限を超えています。Xは-20から20、Yは-15から15の範囲で入力してください。');
+            }
+        });
+
+        function calculateVolume() {
+            // Disk method for volume calculation
+            let volume = 0;
+            const numDiscs = 100; // Number of discs used in the approximation
+            const angleStep = Math.PI * 2 / numDiscs;
+
+            for (let i = 0; i < numDiscs; i++) {
+                const angle = i * angleStep;
+                const x = Math.cos(angle);
+                const z = Math.sin(angle);
+                const yValues = points.map(p => p.y * SCALE_Y);
+                const xValues = points.map(p => p.x * SCALE_X);
+                const radius = getRadiusAtPoint(x, z, xValues, yValues);
+                volume += Math.PI * Math.pow(radius, 2) * (2 * Math.PI / numDiscs);
+            }
+
+            return volume;
+        }
+
+        function getRadiusAtPoint(x, z, xValues, yValues) {
+            let radius = 0;
+            for (let i = 0; i < xValues.length - 1; i++) {
+                const x0 = xValues[i];
+                const y0 = yValues[i];
+                const x1 = xValues[i + 1];
+                const y1 = yValues[i + 1];
+
+                const t = (x - x0) / (x1 - x0);
+                if (t >= 0 && t <= 1) {
+                    radius = y0 + t * (y1 - y0);
+                }
+            }
+            return radius;
+        }
+
+        function calculateSurfaceArea(geometry) {
+            let surfaceArea = 0;
+            const position = geometry.attributes.position;
+            const indices = geometry.index.array;
+
+            for (let i = 0; i < indices.length; i += 3) {
+                const a = new THREE.Vector3().fromBufferAttribute(position, indices[i]);
+                const b = new THREE.Vector3().fromBufferAttribute(position, indices[i + 1]);
+                const c = new THREE.Vector3().fromBufferAttribute(position, indices[i + 2]);
+
+                const edge1 = new THREE.Vector3().subVectors(b, a);
+                const edge2 = new THREE.Vector3().subVectors(c, a);
+                const crossProduct = new THREE.Vector3().crossVectors(edge1, edge2);
+
+                surfaceArea += crossProduct.length() / 2;
+            }
+
+            return surfaceArea;
+        }
+    </script>
+</body>
+</html>
